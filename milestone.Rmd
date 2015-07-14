@@ -1,0 +1,215 @@
+---
+title: "Coursera Data Sceince Capstone - Milestone Report"
+output: html_document
+---
+
+### Executive Summary
+This report explores pre-processing and exploratory analysis techniques on english language text. The report also lays out plans for creating a predictive algorithm and corresponding Shiny app.  
+  
+Key Findings:  
+* The raw data files are over half a GB on disk and contains more than 5000 lines  
+* The data required alot of pre-processing due to ...  
+* The data is highly skewed with the majority of words ...  
+* The most frequent words are:  
+* The most frequent 2 word pairs are:  
+
+```{r load_pkgs, echo=FALSE, message=FALSE}
+library(knitr)          # - report generation
+library(rJava)          # - connection to java (openNLP and RWeka depend)
+library(NLP)            # - nlp infrastructure (widely used by other pkgs)
+library(openNLP)        # - interface to apache oepnNLP library (in java)
+library(tm)             # - comprehensive text mining framework
+library(tau)            # - text analysis utilities
+library(pander)         # - print tables
+library(ggplot2)        # - all-purpose graphing 
+library(dplyr)          # - data manipulation
+library(gridExtra)      # - panel plots
+```
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+
+### Loading the Data
+The data sets are provided by HC Corpora (www.corpora.heliohost.org) and consist of US English text documents pulled from online newspapers, blogs, and Twitter entries.
+
+```{r load_data, cache=TRUE}
+# - define document ids
+id_news <- "en_US.news.txt"
+id_blog <- "en_US.blogs.txt"
+id_twit <- "en_US.twitter.txt"
+
+# - define file paths to documents on disk
+data_dir <- file.path("final", "en_US")
+small_data_dir <- file.path("small_data")
+file_news <- file.path(data_dir, id_news)
+file_blog <- file.path(data_dir, id_blog)
+file_twit <- file.path(data_dir, id_twit)
+
+# - load documents into memory (<<time>>) ... why do this if we are building corpus?
+n_lines <- 5000
+dat_news <- readLines(file_news, skipNul = TRUE, n = n_lines)
+dat_blog <- readLines(file_blog, skipNul = TRUE, n = n_lines)
+dat_twit <- readLines(file_twit, skipNul = TRUE, n = n_lines)
+
+# - load vector of profanity
+#   profanity source: http://fffff.at/googles-official-list-of-bad-words/
+file_profanity <- file.path("profanity_list_en.txt")
+dat_profanity <- readLines(file_profanity)
+```
+
+```{r summarise_files, cache=TRUE}
+# - pull number of lines, word count, and char cound using nix wc command
+nix_wc <- function(filepath)
+{
+    out <- system(paste("wc -lwc",filepath,"| awk {'print $1, $2, $3'}"), intern=TRUE)
+    vec <- as.numeric(unlist(strsplit(out," ")))
+    return(list('lines'=vec[1], 'words'=vec[2], 'chars'=vec[3]))
+}
+
+# - grab file stats
+wc_news <- nix_wc(file_news)
+wc_blog <- nix_wc(file_blog)
+wc_twit <- nix_wc(file_twit)
+ 
+# - data frame summarising the files
+df_sum <- data.frame(
+    "Data Source" = c("Newspapers", "Blog", "Twitter", "Total"),
+    "File Size (MB)" = c(file.size(c(file_news, file_blog, file_twit))/1000^2, 0),
+    "Lines" = c(wc_news$lines, wc_blog$lines, wc_twit$lines, 0),
+    "Words" = c(wc_news$words, wc_blog$words, wc_twit$words, 0),
+    "Characters" = c(wc_news$chars, wc_blog$chars, wc_twit$chars, 0),
+    check.names = FALSE
+)
+df_sum[4,2:5] <- colSums(df_sum[,-1])
+```
+
+```{r summary_tbl}
+# - present table
+pander::panderOptions("round", 2)
+pander::panderOptions("big.mark", ",")
+pander::panderOptions("table.split.table", Inf)
+pander::pander(df_sum)
+```
+
+
+### Data Cleaning
+The raw data files are converted to tm corpus objects which provides a framework (set of methods) for cleaning, manipulating, and analyzing the data. The following cleaning is performed on the corpus:  
+* _Lower Case_: treat words as equal regardless of case  
+* _Foreign Characters_: ??????  
+* _Stop Words_: common words that dont provide much value for analysis  
+* _Punctuation_: ignore punctuation for initial analysis  
+* _Profanity_: we do not want profanity to come up as a suggested word  
+* _Numbers_: we are only interested in words  
+* _Whitespace_: strip all white space so words are nicely seperated
+
+```{r data_clean, cache=TRUE}
+# - define function to clean documents
+clean_corpus <- function(corpus)
+{
+    # - tranformer: gsub replacement
+    trans_gsub <- tm::content_transformer(
+        function(x, pattern, replacement) gsub(pattern, replacement, x))
+    
+    # - conversion to lower case
+    corpus <- tm::tm_map(corpus, tm::content_transformer(tolower))
+    
+    # - remove stop words
+    corpus <- tm::tm_map(corpus, tm::removeWords, tm::stopwords("english"))
+    
+    # - remove punctuation
+    corpus <- tm::tm_map(corpus, trans_gsub, "[[:punct:]]", " ")
+    
+    # - remove profanity (perform after lowercase)
+    corpus <- tm::tm_map(corpus, tm::removeWords, dat_profanity)
+    
+    # - remove numbers
+    corpus <- tm::tm_map(corpus, tm::removeNumbers)
+    
+    # - remove extra white spaces and trim (final step)
+    corpus <- tm::tm_map(corpus, tm::stripWhitespace)
+    corpus <- tm::tm_map(corpus, trans_gsub, "^\\s+|\\s+$", "")
+}
+
+# - construct cleaned corpuses
+corpus_all <- clean_corpus((tm::Corpus(tm::DirSource(small_data_dir))))
+corpus_news <- clean_corpus(tm::VCorpus(tm::VectorSource(dat_news)))
+corpus_blog <- clean_corpus(tm::VCorpus(tm::VectorSource(dat_blog)))
+corpus_twit <- clean_corpus(tm::VCorpus(tm::VectorSource(dat_twit)))
+```
+
+
+### Exploratory Data Analysis
+First, create a term document matrix which consists of documents (news, blog, twitter) as columns and words as rows. The following analysis is performed:  
+* _Term Frequency_:  distribution of word counts  
+* _Count Based Evaluation_: mark the words with the highest occurence  
+    + Multi-Word Sequences: ...  
+* _Word Associations_: ...  
+
+```{r tdm, cache=TRUE}
+# - create term document matrices ... remove stop words???
+tdm_all <- tm::TermDocumentMatrix(corpus_all)
+tdm_news <- tm::TermDocumentMatrix(corpus_news)
+tdm_blog <- tm::TermDocumentMatrix(corpus_blog)
+tdm_twit <- tm::TermDocumentMatrix(corpus_twit)
+```
+
+```{r eda_term_freq, fig.align='center', fig.width=12}
+# - define function to perform analysis
+freq_dist <- function(tdm, gt_filter=0, title="")
+{
+    freq <- rowSums(as.matrix(tdm))
+    p <- data.frame(word=names(freq), freq=freq) %>% 
+        dplyr::filter(freq > gt_filter) %>%
+        ggplot(aes(x=freq)) + 
+            geom_histogram(aes(y = ..density..), alpha=0.6) + 
+            geom_density() + 
+            # - using base 10 (vs 2) since data is spread over a very large range
+            scale_x_continuous(trans='log10') + 
+            labs(title=title, x="freq (log10)")
+    return(p)
+}
+
+# - term frequency
+p_gt0 <- freq_dist(tdm_all, gt_filter=0, title=paste("Term Frequency >0 - All"))
+p_gt100 <- freq_dist(tdm_all, gt_filter=100, title=paste("Term Frequency >100 - All"))
+grid.arrange(p_gt0, p_gt100, ncol=2)
+```
+
+```{r eda_counts, fig.align='center', fig.width=12}
+# - define function to perform analysis
+count_based_eval <- function(tdm, top_n=10, title="")
+{
+    freq <- sort(rowSums(as.matrix(tdm)), decreasing=TRUE)
+    p <- data.frame(word=names(freq), freq=freq) %>% 
+        dplyr::top_n(top_n, freq) %>%
+        ggplot(aes(x=reorder(word,freq),y=freq)) + 
+            geom_point(stat="identity") + 
+            coord_flip() +
+            labs(title=title) + 
+            theme(axis.title = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_line(linetype=3, color="darkgray"))
+    return(p)
+}
+
+# - count based evaluation
+top_n <- 20
+count_based_eval(tdm_all, top_n=top_n, title=paste("Top",top_n,"Word - All"))
+```
+
+```{r eda_bigram}
+# - define n-gram tokenizer
+bigram_tokenizer <- function(x) unlist(
+    lapply(NLP::ngrams(NLP::words(x), 2), paste, collapse = " " ), 
+    use.names = FALSE)
+
+tdm_all_bi <- tm::TermDocumentMatrix(corpus_all, control = list(tokenize = bigram_tokenizer))
+
+
+```
+
+
+
+
