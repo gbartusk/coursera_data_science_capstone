@@ -1,42 +1,48 @@
 ---
-title: "Coursera Data Sceince Capstone - Milestone Report"
+title: "Coursera Data Science Capstone - Milestone Report"
+date: "July 2015"
 output: html_document
 ---
 
 ### Executive Summary
-This report explores pre-processing and exploratory analysis techniques on english language text. The report also lays out plans for creating a predictive algorithm and corresponding Shiny app.  
-  
-Key Findings:  
-* The raw data files are over half a GB on disk and contains more than 5000 lines  
-* The data required alot of pre-processing due to ...  
-* The data is highly skewed with the majority of words ...  
-* The most frequenct characters are: ...  
-* The most frequent words are: ...  
-* The most frequent 2 word sequences are: ...  
-* The most frequent 3 word sequences are: ...  
+This report explores pre-processing and exploratory analysis techniques on english language text. Ultimatly this analysis will flow into a predictive text algorithm and corresponding Shiny app.  
 
+The analysis is laid out across four main sections. The start of each section describes the methods employed followed by outputs / graphs; all code is shown to allow for reproducibility.
 
-```{r load_pkgs, echo=TRUE, message=FALSE}
-library(knitr)          # - report generation
-library(rJava)          # - connection to java (openNLP and RWeka depend)
-library(NLP)            # - nlp infrastructure (widely used by other pkgs)
-library(openNLP)        # - interface to apache oepnNLP library (in java)
-library(tm)             # - comprehensive text mining framework
-library(tau)            # - text analysis utilities
-library(qdap)           # - quantitative discourse analysis
-library(pander)         # - print tables
-library(ggplot2)        # - all-purpose graphing 
-library(dplyr)          # - data manipulation
-library(gridExtra)      # - panel plots
-```
+Key Sections and Findings:  
+
+* _Data Loading_:
+    + The raw data files are over half a GB on disk and contains more than 4mm lines
+* _Data Cleaning_:
+    + Due to the wide range of text sources, the data requires alot of pre-processing
+    + Cleaning techniques include removing foreign charecter and puntuation, profanity filtering, etc
+* _Exploratory Analysis_:
+    + The most frequent letters are: ...
+    + The most frequent 2 word sequences are: ...
+    + The most frequent 3 word sequences are: ...
+    + Coverage ...
+* _Future Development_:
+    + Build a predictive text model
+    + Deploy the model via a Shiny app
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
 ```
 
 
-### Loading the Data
-The data sets are provided by HC Corpora (www.corpora.heliohost.org) and consist of US English text documents pulled from online newspapers, blogs, and Twitter entries. The raw data files are converted to tm corpus objects which provides a framework (set of methods) for cleaning, manipulating, and analyzing the data.
+### Data Loading + Setup
+The data sets are provided by HC Corpora (www.corpora.heliohost.org) and consist of US English text documents pulled from online newspapers, blogs, and Twitter entries. The raw data files are converted to tm corpus objects which provides a framework (set of methods) for cleaning, manipulating, and analyzing the data.  
+
+```{r load_pkgs, echo=TRUE, message=FALSE}
+library(knitr)          # - report generation
+library(NLP)            # - nlp infrastructure (widely used by other pkgs)
+library(tm)             # - comprehensive text mining framework
+library(qdap)           # - quantitative discourse analysis
+library(pander)         # - print tables
+library(ggplot2)        # - all-purpose graphing 
+library(dplyr)          # - data manipulation
+library(gridExtra)      # - panel plots
+```
 
 ```{r load_data, cache=TRUE}
 # - define document ids
@@ -45,33 +51,23 @@ id_blog <- "en_US.blogs.txt"
 id_twit <- "en_US.twitter.txt"
 
 # - define file paths to documents on disk
-data_dir <- file.path("final", "en_US")
 small_data_dir <- file.path("small_data")
+data_dir <- file.path("final", "en_US")
 file_news <- file.path(data_dir, id_news)
 file_blog <- file.path(data_dir, id_blog)
 file_twit <- file.path(data_dir, id_twit)
 
-# - load documents into memory (vector of file lines)
-n_lines <- 5000
-dat_news <- readLines(file_news, skipNul = TRUE, n = n_lines)
-dat_blog <- readLines(file_blog, skipNul = TRUE, n = n_lines)
-dat_twit <- readLines(file_twit, skipNul = TRUE, n = n_lines)
-
 # -  cleaned corpuses
 corpus_all <- tm::Corpus(tm::DirSource(small_data_dir, encoding="UTF-8"), 
     readerControl = list(language="en_US"))
-corpus_news <- tm::VCorpus(tm::VectorSource(dat_news))
-corpus_blog <- tm::VCorpus(tm::VectorSource(dat_blog))
-corpus_twit <- tm::VCorpus(tm::VectorSource(dat_twit))
 
-# - load vector of profanity
-#   profanity source: http://fffff.at/googles-official-list-of-bad-words/
+# - load vector of profanity (source: http://fffff.at/googles-official-list-of-bad-words/)
 file_profanity <- file.path("profanity_list_en.txt")
 dat_profanity <- readLines(file_profanity)
 ```
 
 ```{r summarise_files, cache=TRUE}
-# - pull number of lines, word count, and char cound using nix wc command
+# - pull number of lines, word count, and char cound using the nix wc command
 nix_wc <- function(filepath)
 {
     out <- system(paste("wc -lwc",filepath,"| awk {'print $1, $2, $3'}"), intern=TRUE)
@@ -93,11 +89,12 @@ df_sum <- data.frame(
     "Characters" = c(wc_news$chars, wc_blog$chars, wc_twit$chars, 0),
     check.names = FALSE
 )
+# - compute totals row
 df_sum[4,2:5] <- colSums(df_sum[,-1])
 ```
 
-```{r summary_tbl}
-# - present table
+```{r summary_tbl, cache=TRUE}
+# - file summary table
 pander::panderOptions("round", 2)
 pander::panderOptions("big.mark", ",")
 pander::panderOptions("table.split.table", Inf)
@@ -106,16 +103,19 @@ pander::pander(df_sum)
 
 
 ### Data Cleaning + Term Document Matrix
-First we will clean the data and then create a term document matrix which consists of documents (news, blog, twitter) as columns and words as rows. The term document matrix is a common format for representing texts for computations.    
+First the data will be cleaned into a unified format so it can processed into distinct words and accuratly analyzed. Then a 'term document matrix' will be created which consists of documents (news, blog, twitter) as columns and distinct words as rows. The term document matrix is a common format for representing texts for computations.  
 
 The following cleaning is performed on the corpus:  
-* _Lower Case_: treat words as equal regardless of case  
-* _Foreign Characters_: remove all unicode charecters  
-* _Stop Words_: common words that dont provide much value for analysis  
-* _Punctuation_: ignore punctuation for initial analysis  
-* _Profanity_: we do not want profanity to come up as a suggested word  
-* _Numbers_: we are only interested in words  
-* _Whitespace_: strip all white space so words are nicely seperated
+
+* _Foreign Characters_: remove all non-ascii charecters (eg: accented letters, emoticons, etc)  
+* _Lower Case_: treat words as equal regardless of case  (eg: Dog = dog)  
+* _Stop Words_: remove common words that dont provide much value for analysis  (eg: to, a, is)  
+* _Punctuation_: strip all punctuation  
+* _Profanity_: remove profanity since they shouldn't be predicted  
+* _Numbers_: remove numerics as only interested in predicting words  
+* _Whitespace_: strip all white space so words are nicely seperated  
+* _Stemming_: strip words to root stem, currently not being used  
+* _Spelling Mistakes_: correct common spelling errors in test, currently not being used  
 
 ```{r data_clean_tdm, cache=TRUE}
 # - define function to clean documents
@@ -127,34 +127,24 @@ clean_corpus <- function(corpus)
     # - transformer: remove unicode characters
     rm_unicode <- tm::content_transformer(
         function(x) iconv(x, from="UTF-8", to="ASCII", sub=""))
-    
     # - remove unicode charecters
     corpus <- tm::tm_map(corpus, rm_unicode)
-    
     # - conversion to lower case
     corpus <- tm::tm_map(corpus, tm::content_transformer(tolower))
-    
     # - remove stop words
     corpus <- tm::tm_map(corpus, tm::removeWords, tm::stopwords("english"))
-    
     # - remove punctuation
-    #   the tm transofrm replaces punct with empty string
-    #   this removes all the UTF charecters too (eg: \U0001f466)
     corpus <- tm::tm_map(corpus, trans_gsub, "[[:punct:]]", "")
-    #corpus <- tm::tm_map(corpus, tm::removePunctuation, preserve_intra_word_dashes=T)
-    
     # - remove profanity (perform after lowercase)
     corpus <- tm::tm_map(corpus, tm::removeWords, dat_profanity)
-    
     # - remove numbers
     corpus <- tm::tm_map(corpus, tm::removeNumbers)
-    
     # - remove extra white spaces and trim (final step)
     corpus <- tm::tm_map(corpus, tm::stripWhitespace)
     corpus <- tm::tm_map(corpus, trans_gsub, "^\\s+|\\s+$", "")
 }
 
-# - define tokenizers
+# - define n-gram tokenizers
 bigram_tokenizer <- function(x) unlist(
     lapply(NLP::ngrams(NLP::words(x), 2), paste, collapse = " "), use.names = FALSE)
 trigram_tokenizer <- function(x) unlist(
@@ -162,41 +152,23 @@ trigram_tokenizer <- function(x) unlist(
 fourgram_tokenizer <- function(x) unlist(
     lapply(NLP::ngrams(NLP::words(x), 4), paste, collapse = " "), use.names = FALSE)
 
-# - construct cleaned corpuses
+# - construct cleaned corpus
 corpus_all <- clean_corpus(corpus_all)
-corpus_news <- clean_corpus(corpus_news)
-corpus_blog <- clean_corpus(corpus_blog)
-corpus_twit <- clean_corpus(corpus_twit)
 
 # - construct term document matrices
 tdm_all <- tm::TermDocumentMatrix(corpus_all)
 tdm_all_bi <- tm::TermDocumentMatrix(corpus_all, control = list(tokenize = bigram_tokenizer))
 tdm_all_tri <- tm::TermDocumentMatrix(corpus_all, control = list(tokenize = trigram_tokenizer))
-
-# - 
-tdm_news <- tm::TermDocumentMatrix(corpus_news)
-tdm_news_bi <- tm::TermDocumentMatrix(corpus_news, control = list(tokenize = bigram_tokenizer))
-tdm_news_tri <- tm::TermDocumentMatrix(corpus_news, control = list(tokenize = trigram_tokenizer))
-
-# - 
-tdm_blog <- tm::TermDocumentMatrix(corpus_blog)
-tdm_blog_bi <- tm::TermDocumentMatrix(corpus_blog, control = list(tokenize = bigram_tokenizer))
-tdm_blog_tri <- tm::TermDocumentMatrix(corpus_blog, control = list(tokenize = trigram_tokenizer))
-
-# - 
-tdm_twit <- tm::TermDocumentMatrix(corpus_twit)
-tdm_twit_bi <- tm::TermDocumentMatrix(corpus_twit, control = list(tokenize = bigram_tokenizer))
-tdm_twit_tri <- tm::TermDocumentMatrix(corpus_twit, control = list(tokenize = trigram_tokenizer))
-
 ```
 
 
 ### Exploratory Data Analysis
 The following analysis is performed:  
-* _Character Frequency_: percentage of total total charecters  
+
+* _Character Frequency_: each charecters percentage of total  
 * _Term Frequency_:  distribution of word counts  
 * _Count Based Evaluation_: mark the n-grams with the highest occurence  
-* _Word Associations_: ...  
+* _Word Coverage_: percentage of n-grams needed to represent corresponding percentage of corpus  
 
 ```{r eda_char_freq, fig.align='center', fig.width=12}
 # - dot plot of all characters in cleaned data set
@@ -208,11 +180,24 @@ data.frame(qdap::dist_tab(unlist(strsplit(rownames(tdm_all),"")))) %>%
 ```
 
 ```{r eda_term_freq, fig.align='center', fig.width=12}
+# - define function to convert term document matrix to frequency data frame
+get_freq_df <- function(tdm)
+{
+    freq <- rowSums(as.matrix(tdm))
+    ttl_freq <- sum(freq)
+    data.frame(ngram=names(freq), freq=freq) %>% 
+        dplyr::arrange(desc(freq)) %>%
+        dplyr::mutate(
+            n = 1:n(),
+            n_cum_pct = n / n(),
+            freq_pct = ifelse(freq==0,0,freq/ttl_freq),
+            freq_cum_pct = cumsum(freq_pct))
+}
+
 # - define function to perform term frequency analysis
 freq_dist <- function(tdm, gt_filter=0, title="")
 {
-    freq <- rowSums(as.matrix(tdm))
-    p <- data.frame(word=names(freq), freq=freq) %>% 
+    get_freq_df(tdm) %>% 
         dplyr::filter(freq > gt_filter) %>%
         ggplot(aes(x=freq)) + 
             geom_histogram(aes(y = ..density..), alpha=0.6) + 
@@ -220,7 +205,6 @@ freq_dist <- function(tdm, gt_filter=0, title="")
             # - using base 10 (vs 2) since data is spread over a very large range
             scale_x_continuous(trans='log10') + 
             labs(title=title, x="frequency (log10)")
-    return(p)
 }
 
 # - term frequency
@@ -229,46 +213,57 @@ p_gt100 <- freq_dist(tdm_all, gt_filter=100, title=paste("Term Frequency - Count
 grid.arrange(p_gt0, p_gt100, ncol=2)
 ```
 
-```{r eda_counts, fig.align='center', fig.width=12}
-# - define function to perform analysis
+```{r eda_ngram_counts, fig.align='center', fig.width=12, fig.height=12}
+# - define function to plot top-n n-grams in term document matrix
 count_based_eval <- function(tdm, top_n=10, title="")
 {
-    freq <- sort(rowSums(as.matrix(tdm)), decreasing=TRUE)
-    p <- data.frame(word=names(freq), freq=freq) %>% 
+    get_freq_df(tdm) %>% 
         dplyr::top_n(top_n, freq) %>%
-        # - dplyr::top_n will return more then X when there is a tie
-        #   thus we need to explicitly limit results to the first 20 rows
+        # - explicitly limiting  results since dplyr::top_n will return more then n when there is a tie, 
         arrange(desc(freq)) %>% filter(1:n()<=top_n) %>%
-        ggplot(aes(x=reorder(word,freq),y=freq)) + 
+        ggplot(aes(x=reorder(ngram,freq),y=freq)) + 
             geom_point(stat="identity") + 
             coord_flip() +
             labs(title=title) + 
             theme(axis.title = element_blank(),
                 panel.grid.major.x = element_blank(),
                 panel.grid.major.y = element_line(linetype=3, color="darkgray"))
-    return(p)
 }
 
-# - count based evaluation
+# - plot ngram frequencies
 top_n <- 20
-count_based_eval(tdm_all, top_n=top_n, title=paste("Top",top_n,"Tokens - ALL"))
-count_based_eval(tdm_all_bi, top_n=top_n, title=paste("Top",top_n,"Bigrams - ALL"))
-count_based_eval(tdm_all_tri, top_n=top_n, title=paste("Top",top_n,"Trigrams - ALL"))
+p_count_1grams <- count_based_eval(tdm_all, top_n=top_n, title=paste("Top",top_n,"Unigrams"))
+p_count_2grams <- count_based_eval(tdm_all_bi, top_n=top_n, title=paste("Top",top_n,"Bigrams"))
+p_count_3grams <- count_based_eval(tdm_all_tri, top_n=top_n, title=paste("Top",top_n,"Trigrams"))
+grid.arrange(p_count_1grams, p_count_2grams, p_count_3grams, nrow=3)
+```
 
-count_based_eval(tdm_news, top_n=top_n, title=paste("Top",top_n,"Tokens - NEWS"))
-count_based_eval(tdm_news_bi, top_n=top_n, title=paste("Top",top_n,"Bigrams - NEWS"))
-count_based_eval(tdm_news_tri, top_n=top_n, title=paste("Top",top_n,"Trigrams - NEWS"))
+```{r eda_ngram_cov, fig.align='center', fig.width=12}
+# - define function to compute percentage of corpus covered
+ngram_coverage <- function(df_freq, title="", ymark=0.8)
+{
+    # - find row closest to ymark
+    df_pt <- df_freq %>% dplyr::mutate(quant = abs(freq_cum_pct-ymark)) %>% dplyr::filter(rank(quant)==1)
+    # - construct cumulative sum plot
+    ggplot2::ggplot(df_freq, aes(x=n_cum_pct, y=freq_cum_pct)) + 
+        geom_line() +
+        geom_point(data=df_pt, aes(x=n_cum_pct, y=freq_cum_pct)) + 
+        geom_vline(xintercept=df_pt$n_cum_pct[1], linetype="dashed", alpha=0.5) +
+        geom_hline(yintercept=df_pt$freq_cum_pct[1], linetype="dashed", alpha=0.5) +
+        scale_y_continuous(breaks=c(seq(0,1,by=0.5),ymark)) + 
+        scale_x_continuous(breaks=c(seq(0,1,by=0.5),round(df_pt$n_cum_pct[1],2))) + 
+        labs(title=title, x="word count", y="cumulative percentage")   
+}
 
-count_based_eval(tdm_blog, top_n=top_n, title=paste("Top",top_n,"Tokens - BLOG"))
-count_based_eval(tdm_blog_bi, top_n=top_n, title=paste("Top",top_n,"Bigrams - BLOG"))
-count_based_eval(tdm_blog_tri, top_n=top_n, title=paste("Top",top_n,"Trigrams - BLOG"))
-
-count_based_eval(tdm_twit, top_n=top_n, title=paste("Top",top_n,"Tokens - TWIT"))
-count_based_eval(tdm_twit_bi, top_n=top_n, title=paste("Top",top_n,"Bigrams - TWIT"))
-count_based_eval(tdm_twit_tri, top_n=top_n, title=paste("Top",top_n,"Trigrams - TWIT"))
-
+# - plot cumulative frequency for n-grams
+p_cov_1gram <- ngram_coverage(get_freq_df(tdm_all), "Unigram Coverage")
+p_cov_2gram <- ngram_coverage(get_freq_df(tdm_all_bi), "Bigram Coverage")
+p_cov_3gram <- ngram_coverage(get_freq_df(tdm_all_tri), "Trigram Coverage")
+grid.arrange(p_cov_1gram, p_cov_2gram, p_cov_3gram, ncol=3)
 ```
 
 
+### Future Plans
+... briefly summarize your plans for creating the prediction algorithm and Shiny app in a way that would be understandable to a non-data scientist manager ...  
 
 
