@@ -5,25 +5,27 @@ output: html_document
 ---
 
 ### Executive Summary
-This report explores pre-processing and exploratory analysis techniques on english language text. Ultimatly this analysis will flow into a predictive text algorithm and corresponding Shiny app.  
+This report explores pre-processing and exploratory analysis techniques on English language text. Ultimately this analysis will flow into a predictive text algorithm and corresponding Shiny app.  
 
 The analysis is laid out across four main sections. The start of each section describes the methods employed followed by outputs / graphs; all code is shown to allow for reproducibility.
 
-Key Sections and Findings:  
+Report Sections and Key Findings:  
 
 * _Data Loading_:
     + The raw data files are over half a GB on disk and contains more than 4mm lines
 * _Data Cleaning_:
-    + Due to the wide range of text sources, the data requires alot of pre-processing
-    + Cleaning techniques include removing foreign charecter and puntuation, profanity filtering, etc
+    + Due to the wide range of text sources, the data requires a lot of pre-processing
+    + Cleaning techniques include removing foreign character and punctuation, profanity filtering, etc
 * _Exploratory Analysis_:
-    + The most frequent letters are: ...
-    + The most frequent 2 word sequences are: ...
-    + The most frequent 3 word sequences are: ...
-    + Coverage ...
+    + The most frequent letter is 'e'
+    + The frequency of individual words is highly skewed towards a subset of words
+    + The most frequent single words are: 'said', 'will', 'one'
+    + The most frequent 2 word sequences are: 'last night', 'new york', 'right now'
+    + The most frequent 3 word sequences are: 'new york city', 'two years ago', 'let us know'
+    + Coverage: as the length of the n-gram increases, the skewness fades and it takes an increasingly proportional percentage of n-grams to cover the same percentage of text
 * _Future Development_:
-    + Build a predictive text model
-    + Deploy the model via a Shiny app
+    + Build a predictive language model
+    + Deploy the predictive model via a Shiny app
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
@@ -51,14 +53,14 @@ id_blog <- "en_US.blogs.txt"
 id_twit <- "en_US.twitter.txt"
 
 # - define file paths to documents on disk
-small_data_dir <- file.path("small_data")
+sample_dir <- file.path("sample_data", "en_US")
 data_dir <- file.path("final", "en_US")
 file_news <- file.path(data_dir, id_news)
 file_blog <- file.path(data_dir, id_blog)
 file_twit <- file.path(data_dir, id_twit)
 
-# -  cleaned corpuses
-corpus_all <- tm::Corpus(tm::DirSource(small_data_dir, encoding="UTF-8"), 
+# - load documents into corpus object
+corpus_all <- tm::Corpus(tm::DirSource(sample_dir, encoding="UTF-8"), 
     readerControl = list(language="en_US"))
 
 # - load vector of profanity (source: http://fffff.at/googles-official-list-of-bad-words/)
@@ -93,7 +95,7 @@ df_sum <- data.frame(
 df_sum[4,2:5] <- colSums(df_sum[,-1])
 ```
 
-```{r summary_tbl, cache=TRUE}
+```{r summary_tbl}
 # - file summary table
 pander::panderOptions("round", 2)
 pander::panderOptions("big.mark", ",")
@@ -103,19 +105,18 @@ pander::pander(df_sum)
 
 
 ### Data Cleaning + Term Document Matrix
-First the data will be cleaned into a unified format so it can processed into distinct words and accuratly analyzed. Then a 'term document matrix' will be created which consists of documents (news, blog, twitter) as columns and distinct words as rows. The term document matrix is a common format for representing texts for computations.  
+First the data will be cleaned into a unified format so it can processed into distinct words and accurately analyzed. Then a 'term document matrix' will be created which consists of documents (news, blog, Twitter) as columns and distinct words as rows. The term document matrix is a common format for representing texts for computations.  
 
 The following cleaning is performed on the corpus:  
 
-* _Foreign Characters_: remove all non-ascii charecters (eg: accented letters, emoticons, etc)  
-* _Lower Case_: treat words as equal regardless of case  (eg: Dog = dog)  
-* _Stop Words_: remove common words that dont provide much value for analysis  (eg: to, a, is)  
-* _Punctuation_: strip all punctuation  
-* _Profanity_: remove profanity since they shouldn't be predicted  
-* _Numbers_: remove numerics as only interested in predicting words  
-* _Whitespace_: strip all white space so words are nicely seperated  
-* _Stemming_: strip words to root stem, currently not being used  
-* _Spelling Mistakes_: correct common spelling errors in test, currently not being used  
+* _Foreign Characters_: remove all non-ASCII characters (eg: accented letters, emoticons, etc)
+* _Lower Case_: treat words as equal regardless of case  (eg: Dog = dog)
+* _Stop Words_: remove common words that don't provide much value for analysis  (eg: to, a, is)
+* _Punctuation_: strip all punctuation
+* _Profanity_: remove profanity since they shouldn't be predicted 
+* _Numbers_: remove numbers as only interested in predicting words 
+* _Whitespace_: strip all white space so words are nicely separated
+* _Future Considerations_: stemming words to their root form, correcting common spelling mistakes, mapping foreign characters onto ASCII equivalents 
 
 ```{r data_clean_tdm, cache=TRUE}
 # - define function to clean documents
@@ -127,7 +128,7 @@ clean_corpus <- function(corpus)
     # - transformer: remove unicode characters
     rm_unicode <- tm::content_transformer(
         function(x) iconv(x, from="UTF-8", to="ASCII", sub=""))
-    # - remove unicode charecters
+    # - remove unicode characters
     corpus <- tm::tm_map(corpus, rm_unicode)
     # - conversion to lower case
     corpus <- tm::tm_map(corpus, tm::content_transformer(tolower))
@@ -165,9 +166,9 @@ tdm_all_tri <- tm::TermDocumentMatrix(corpus_all, control = list(tokenize = trig
 ### Exploratory Data Analysis
 The following analysis is performed:  
 
-* _Character Frequency_: each charecters percentage of total  
+* _Character Frequency_: each characters percentage of total  
 * _Term Frequency_:  distribution of word counts  
-* _Count Based Evaluation_: mark the n-grams with the highest occurence  
+* _Count Based Evaluation_: mark the n-grams with the highest occurrence  
 * _Word Coverage_: percentage of n-grams needed to represent corresponding percentage of corpus  
 
 ```{r eda_char_freq, fig.align='center', fig.width=12}
@@ -240,7 +241,7 @@ grid.arrange(p_count_1grams, p_count_2grams, p_count_3grams, nrow=3)
 
 ```{r eda_ngram_cov, fig.align='center', fig.width=12}
 # - define function to compute percentage of corpus covered
-ngram_coverage <- function(df_freq, title="", ymark=0.8)
+ngram_coverage <- function(df_freq, title="", ymark=0.9)
 {
     # - find row closest to ymark
     df_pt <- df_freq %>% dplyr::mutate(quant = abs(freq_cum_pct-ymark)) %>% dplyr::filter(rank(quant)==1)
@@ -263,7 +264,8 @@ grid.arrange(p_cov_1gram, p_cov_2gram, p_cov_3gram, ncol=3)
 ```
 
 
-### Future Plans
-... briefly summarize your plans for creating the prediction algorithm and Shiny app in a way that would be understandable to a non-data scientist manager ...  
+### Future Development
+_Prediction Algorithm_: build a language model such that given a sequence of words the algorithm will predict the next most likely word. For example, given the word order w1, w2, w3 the algorithm will suggest the most probable next word w4.  
 
+_Shiny app_: build a Shiny app that allows users to interact with the prediction algorithm. The app will accept an n-gram and predict the next word, with the highest probability, for the user.  
 
