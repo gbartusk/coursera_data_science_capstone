@@ -20,6 +20,11 @@ library(wordcloud)      # - word clouds
 library(dplyr)          # - data processing
 library(stringr)        # - string manipulation
 
+setwd("/Users/Gus/Google Drive/dev/coursera/data_sciences/10_capstone")
+sample_dir <- file.path("sample_data", "en_US")
+data_dir <- file.path("final", "en_US")
+data_cache_dir <- file.path("data_cache","en_US")
+
 # - Notes:
 #   > https://www.ibm.com/developerworks/community/blogs/nlp/entry/tokenization?lang=en
 #   > http://nlp.stanford.edu/IR-book/html/htmledition/contents-1.html
@@ -77,12 +82,6 @@ library(stringr)        # - string manipulation
     # - trigrams w/ and w/out stop words: 1.42 GB
     # - four-grams w/ and w/out stop words: 1.8 GB
     # - Total: ~4GB+
-    
-    # - directories
-    setwd("/Users/Gus/Google Drive/dev/coursera/data_sciences/10_capstone")
-    sample_dir <- file.path("sample_data", "en_US")
-    data_dir <- file.path("final", "en_US")
-    data_cache_dir <- file.path("data_cache","en_US")
     
     # - load all corpus
     corpus_all_raw <- tm::Corpus(tm::DirSource(sample_dir, encoding="UTF-8"))
@@ -319,30 +318,37 @@ library(stringr)        # - string manipulation
     df_all_freq_stops_stem_four <- readRDS(path_df_all_freq_stops_stem_four)
     df_all_freq_stops_stem_five <- readRDS(path_df_all_freq_stops_stem_five)
     
+    rm(df_all_freq_uni, df_all_freq_bi, df_all_freq_stops_bi, df_all_freq_stops_tri, 
+        df_all_freq_stops_stem_tri, df_all_freq_stops_four, df_all_freq_stops_stem_four,
+        df_all_freq_stops_stem_five); gc()
+    
     # - convert factors to strings and add n-1
-    temp_clean <- function(df)
+    if (FALSE)
     {
-        # - commenting out since we still want to remove the factor for unigrams
-#         n <- length(unlist(strsplit(as.character(df$ngram[1]), " ")))
-#         if (n==1) return df
-        a <- df %>%
-            dplyr::mutate(
-                # - remove factor
-                ngram = as.character(ngram),
-                # - n-1 gram (should be no match for unigrams b/c of the space)
-                n_1gram = gsub(" \\w+$", "", ngram)
-            )
-        return(a)
+        temp_clean <- function(df)
+        {
+            # - commenting out since we still want to remove the factor for unigrams
+    #         n <- length(unlist(strsplit(as.character(df$ngram[1]), " ")))
+    #         if (n==1) return df
+            a <- df %>%
+                dplyr::mutate(
+                    # - remove factor
+                    ngram = as.character(ngram),
+                    # - n-1 gram (should be no match for unigrams b/c of the space)
+                    n_1gram = gsub(" \\w+$", "", ngram)
+                )
+            return(a)
+        }
+        # - temp cleaning and save down
+        df_all_freq_uni <- temp_clean(df_all_freq_uni)
+        df_all_freq_bi <- temp_clean(df_all_freq_bi)
+        df_all_freq_stops_tri <- temp_clean(df_all_freq_stops_tri)
+        df_all_freq_stops_stem_tri <- temp_clean(df_all_freq_stops_stem_tri)
+        df_all_freq_stops_four <- temp_clean(df_all_freq_stops_four)
+        df_all_freq_stops_stem_four <- temp_clean(df_all_freq_stops_stem_four)
+        df_all_freq_stops_stem_five <- temp_clean(df_all_freq_stops_stem_five)
     }
-    # - temp cleaning and save down
-    df_all_freq_uni <- temp_clean(df_all_freq_uni)
-    df_all_freq_bi <- temp_clean(df_all_freq_bi)
-    df_all_freq_stops_tri <- temp_clean(df_all_freq_stops_tri)
-    df_all_freq_stops_stem_tri <- temp_clean(df_all_freq_stops_stem_tri)
-    df_all_freq_stops_four <- temp_clean(df_all_freq_stops_four)
-    df_all_freq_stops_stem_four <- temp_clean(df_all_freq_stops_stem_four)
-    df_all_freq_stops_stem_five <- temp_clean(df_all_freq_stops_stem_five)
-
+        
     # - save down in replacement - * NOTE STILL OTHERS THAT NEED TO BE CLEANED UP *
     saveRDS(df_all_freq_uni, path_df_all_freq_uni)
     saveRDS(df_all_freq_bi, path_df_all_freq_bi)
@@ -398,8 +404,81 @@ library(stringr)        # - string manipulation
     
     # - 
     
+    # - run ngram model
+    run_ngram_model("q6")
     
-    q <- "q1"
+    
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # - PYTHON PROCESSED DATA
+    fp_py_1gram <- file.path(data_cache_dir, "1grams_gte2freq.csv")
+    fp_py_2gram <- file.path(data_cache_dir, "2grams_gte2freq.csv")
+    fp_py_3gram <- file.path(data_cache_dir, "3grams_gte2freq.csv")
+    fp_py_4gram <- file.path(data_cache_dir, "4grams_gte2freq.csv")
+    fp_py_5gram <- file.path(data_cache_dir, "5grams_gte2freq.csv")
+    
+    df_py_1gram <- load_py_proc_data(fp_py_1gram)
+    df_py_2gram <- load_py_proc_data(fp_py_2gram)
+    df_py_3gram <- load_py_proc_data(fp_py_3gram)
+    df_py_4gram <- load_py_proc_data(fp_py_4gram)
+    df_py_5gram <- load_py_proc_data(fp_py_5gram)
+    
+    rm(df_py_1gram, df_py_2gram, df_py_3gram, df_py_4gram, df_py_5gram); gc()
+    
+    # - drop any number anything that ends in PROFANITY or NUM since we 
+    #   dont want to predict those, and improve speed / size
+
+    run_py_ngram_model("q6")
+    
+    # - additional support by looking at google search counts
+    # - q1
+    get_google_hits("id%live%and%id%die", log=T)
+    get_google_hits("id%live%and%id%eat", log=T)
+    get_google_hits("id%live%and%id%give", log=T)
+    get_google_hits("id%live%and%id%sleep", log=T)
+    # - q2
+    get_google_hits("telling%me%about%his%spiritual", log=T)
+    get_google_hits("telling%me%about%his%marital", log=T)
+    get_google_hits("telling%me%about%his%horticultural", log=T)
+    get_google_hits("telling%me%about%his%financial", log=T)
+    # - q5
+    get_google_hits("time%to%take%a%minute", log=T)
+    get_google_hits("time%to%take%a%walk", log=T)
+    get_google_hits("time%to%take%a%look", log=T)
+    get_google_hits("time%to%take%a%picture", log=T)
+    # - q6
+    get_google_hits("jury%to%settle%the%matter", log=T)
+    get_google_hits("jury%to%settle%the%account", log=T)
+    get_google_hits("jury%to%settle%the%incident", log=T)
+    get_google_hits("jury%to%settle%the%case", log=T)
+    # - q10
+    get_google_hits("adam%sandlers%stories", log=T)
+    get_google_hits("adam%sandlers%novels", log=T)
+    get_google_hits("adam%sandlers%pictures", log=T)
+    get_google_hits("adam%sandlers%movies", log=T)
+    
+}
+
+#' helper function to run ngram model multiple times for quiz
+#' using python processed data
+#' 
+#' @param q - quiz question number from args list
+run_py_ngram_model <- function(q)
+{
+    cat(rep("\n",5))
+    ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, df_freq=df_py_1gram)
+    ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, df_freq=df_py_2gram)
+    ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, df_freq=df_py_3gram)
+    ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, df_freq=df_py_4gram)
+    ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, df_freq=df_py_5gram)
+}
+
+#' helper function to run ngram model multiple times for quiz
+#' using pure R processed data
+#' 
+#' @param q - quiz question number from args list
+run_ngram_model <-function(q)
+{
+    cat(rep("\n",5))
     ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, 
         df_freq=df_all_freq_stops_stem_five, n=5, rm_stop_words=FALSE, stem=TRUE)
     ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, 
@@ -416,14 +495,7 @@ library(stringr)        # - string manipulation
         df_freq=df_all_freq_bi, n=2, rm_stop_words=TRUE)
     ngram_model(sentence=quiz_input[[q]]$sent, next_words=quiz_input[[q]]$opts, 
         df_freq=df_all_freq_uni, n=1, rm_stop_words=TRUE)
-    
-    
-    
-    
 }
-
-
-
 
 # - task 1: playground
 {    
@@ -914,8 +986,8 @@ get_tokenization <- function(corpus, n_gram=1)
 #' @param df_freq - (data.frame) bigram frequency table
 #' @param n - (numeric) n-gram
 #' @return (void) prints results to screen
-ngram_model <- function(sentence, next_words, df_freq, n=2, rm_stop_words=TRUE,
-    stem=FALSE)
+ngram_model <- function(sentence, next_words, df_freq, n, rm_stop_words=FALSE, 
+    stem=FALSE, dump_top_ngram=FALSE)
 {
     start_time <- Sys.time()
     
@@ -925,12 +997,17 @@ ngram_model <- function(sentence, next_words, df_freq, n=2, rm_stop_words=TRUE,
     require(stringr)
     
     # - testing
-#     sentence <- "When you breathe, I want to be the air for you. I'll be there for you, I'd live and I'd"
-#     next_words <- c("die","eat","give","sleep")
-#     df_freq <- df_all_freq_uni
-#     n <- 1
-#     rm_stop_words <- TRUE
+#     sentence <- quiz_input[["q1"]]$sent
+#     next_words <- quiz_input[["q1"]]$opts
+#     df_freq <- df_py_2gram
+#     rm_stop_words <- FALSE
 #     stem <- FALSE
+    
+    # - determine n
+    if (missing(n))
+    {
+        n <- length(unlist(strsplit(df_freq$ngram[1],' ')))
+    }
     
     # - convert the sentence to a corpus
     corpus_sent <- tm::VCorpus(tm::VectorSource(c(sentence)))
@@ -941,11 +1018,7 @@ ngram_model <- function(sentence, next_words, df_freq, n=2, rm_stop_words=TRUE,
     sent_tail <- paste(tail(stringr::str_split(sent_vector, pattern=" ")[[1]],n-1), collapse=" ")
     cat(paste0(n,"-gram (stem=",stem,") :"),sent_vector,"______","\n")
     
-    # - setup regex
-    #w1 <- paste0("^",sent_tail, " ")
-    
     # - compute all n-grams that start with word (denominator)
-    #df_freq_match <- df_freq %>% dplyr::filter(grepl(w1, ngram))
     df_freq_match <- df_freq %>% dplyr::filter(n_1gram==sent_tail)
     denom <- as.numeric(colSums(df_freq_match %>% dplyr::select(freq)))
     
@@ -965,51 +1038,37 @@ ngram_model <- function(sentence, next_words, df_freq, n=2, rm_stop_words=TRUE,
     }
     
     # - loop over next words and check frequency (print to screen)
-    for (opt_cv in next_words)
-    {
-        # - not only is this grep slow but it is wrong since it doenst look for end of sent too
-#         num <- as.numeric(colSums(df_freq %>% 
-#             dplyr::filter(grepl(paste0(w1,opt_cv), ngram)) %>% 
-#             dplyr::select(freq)))
-        # - testing
-#         df_temp <- df_freq %>% dplyr::filter(grepl(paste0(w1,opt_cv), ngram))
-#         print(head(df_temp))
-#         num <- as.numeric(colSums(df_temp %>% dplyr::select(freq)))
-        
+    for (opt_cv in next_words) {
         # - sequence to lookup in df
         num <- NULL
-        if ( n==1 )
-        {
+        if ( n==1 ) {
             num <- as.numeric(colSums(df_freq %>% 
-                dplyr::filter(ngram == opt_cv) %>%
-                dplyr::select(freq)))
-        }
-        else
-        {
+                    dplyr::filter(ngram == opt_cv) %>%
+                    dplyr::select(freq)))
+        } else {
             num <- as.numeric(colSums(df_freq_match %>% 
-                dplyr::filter(ngram == paste(sent_tail,opt_cv)) %>%
-                dplyr::select(freq)))
+                    dplyr::filter(ngram == paste(sent_tail,opt_cv)) %>%
+                    dplyr::select(freq)))
         }
 
         # - compute percentages
         fraction <- num / denom
-        cat("  > ",opt_cv,": ",num," / ",denom," => ",100*fraction, ", log-prob: ",
-            log2(fraction) , "%\n", sep="")
-    }
+        cat("  > ",sent_tail," [",opt_cv,"]: ",num," / ",denom," => ",100*fraction,"%, log-prob: ",
+            log2(fraction) , "\n", sep="")
+    }   
     
     # - print the top probabilities regardless of inputs
     cat("  > top n-grams:\n")
-    if (n==1 || nrow(df_freq_match)==0)
-    {
-        head(df_freq)
+    if (denom>0 && dump_top_ngram==T) {
+        if (n==1 || nrow(df_freq_match)==0) {
+            print(head(df_freq))
+        } else {
+            print(head(df_freq_match))
+        }
     }
-    else
-    {
-        head(df_freq_match)
-    }
-    
+        
     end_time <- Sys.time()
-    cat("function run time: ", end_time-start_time," seconds \n")
+    cat("function run time: ", end_time-start_time," seconds \n",rep("~",40),"\n")
     
     # - void return
     #return(NULL)
@@ -1026,90 +1085,115 @@ load_py_proc_data <- function(filepath)
     require(dplyr)
     
     # - testing
-    filepath <- file.path(data_cache_dir, "3grams.csv")
+    #filepath <- fp_py_2gram
     
-    
-    # need to skip nulls for the moment (few in twitter than need to be stripped out in py)
-    df_py_raw <- read.csv(filepath, stringsAsFactors=F, 
-        colClasses=c("character","integer"), skipNul = T) %>%
+    # - process into form thats ready for the ngram_model
+    df_py_raw <- readr::read_csv(filepath, progress=F, col_types="ci") %>%
         dplyr::arrange(desc(freq)) %>%
-        dplyr::mutate(
-            n = 1:n(),
-            n_cum_pct = n / n(),
-            ttl_freq = sum(freq),
-            freq_pct = ifelse(freq==0,0,freq/ttl_freq),
-            freq_cum_pct = cumsum(freq_pct),
-            n_1gram = gsub(" \\w+$", "", ngram)
-        ) %>%
-        dplyr::select(-ttl_freq)
+            dplyr::mutate(
+                n = 1:n(),
+                n_cum_pct = n / n(),
+                ttl_freq = sum(freq),
+                freq_pct = ifelse(freq==0,0,freq/ttl_freq),
+                freq_cum_pct = cumsum(freq_pct),
+                n_1gram = gsub(" \\w+$", "", ngram)
+            ) %>%
+            dplyr::select(-ttl_freq)
     
+    # - readr bombs out with null chars
+    #df_py_raw <- read.csv(filepath, stringsAsFactors=F, colClasses=c("character","integer"), skipNul = T)
+    
+    return(df_py_raw)
 }
+
+
+#' get google search counts
+#' http://thebiobucket.blogspot.co.uk/2012/03/playing-with-xml-get-no-of-google.html
+#' > kinda buggy... sometimes returns NA despire results on google
+get_google_hits <- function(input, log=FALSE)
+{
+    require(XML)
+    require(RCurl)
+    url <- paste("https://www.google.com/search?q=\"",input, "\"", sep = "")
+    CAINFO = paste(system.file(package="RCurl"), "/CurlSSL/ca-bundle.crt", sep = "")
+    script <- getURL(url, followlocation = TRUE, cainfo = CAINFO)
+    doc <- htmlParse(script)
+    res <- xpathSApply(doc, '//*/div[@id="resultStats"]', xmlValue)
+    hits <- as.integer(gsub("[^0-9]", "", res))
+    if (log==TRUE)
+    {
+        cat("> Search URL:", url, "\n")
+        cat("> No. of Hits:",prettyNum(hits,big.mark=",",scientific=FALSE),"\n")
+    }
+    invisible(hits)
+}
+  
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # - TESTING
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-c <- c("I am Sam", "Sam I am", "I do not like green eggs and ham")
-corp <- tm::VCorpus(tm::VectorSource(c))
-tdm_bigram <- tm::TermDocumentMatrix(corp, control = list(tokenize = bigram_tokenizer))
-df_bigram <- get_freq_df(tdm_bigram)
-str(df_bigram)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-corp_twit <- tm::Corpus(tm::DirSource(sample_dir, encoding="UTF-8", pattern="news"))
-
-corpus_twit_slim <- tm::VCorpus(tm::VectorSource(corp_twit[[1]][["content"]][c(2)]))
-lapply(corpus_twit_slim, as.character)
-
-corpus_twit_slim_clean <- clean_corpus(corpus_twit_slim, rm_stop_words=F, stem=F)
-lapply(corpus_twit_slim_clean, as.character)
-
-tdm_bigram <- tm::TermDocumentMatrix(corpus_twit_slim_clean, control = list(tokenize = bigram_tokenizer))
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-length(tdm_all_tri[["dimnames"]][["Terms"]])
-grep("case of ", tdm_all_tri[["dimnames"]][["Terms"]], value=T)
-df_all_freq <- get_freq_df(tdm_all_tri)
-head(df_all_freq[grep("^case of ", df_all_freq$ngram),])
-
-
-corpus_news <- tm::Corpus(
-    tm::DirSource(sample_dir, encoding="UTF-8", pattern="news"), 
-    readerControl = list(language="en_US"))
-
-corpus_news_slim <- tm::VCorpus(tm::VectorSource(corpus_news_clean[[1]][["content"]][51002]))
-
-
-corpus_news_clean <- clean_corpus(corpus_news)
-corpus_news_slim <- clean_corpus(corpus_news_slim, rm_stop_words = FALSE)
-
-# - define n-gram tokenizers
-bigram_tokenizer <- function(x) unlist(
-    lapply(NLP::ngrams(NLP::words(x), 2), paste, collapse = " "), use.names = FALSE)
-trigram_tokenizer <- function(x) unlist(
-    lapply(NLP::ngrams(NLP::words(x), 3), paste, collapse = " "), use.names = FALSE)
-fourgram_tokenizer <- function(x) unlist(
-    lapply(NLP::ngrams(NLP::words(x), 4), paste, collapse = " "), use.names = FALSE)
-
-tdm_news_tri <- tm::TermDocumentMatrix(corpus_news_clean, 
-    control = list(tokenize = trigram_tokenizer))
-length(tdm_news_tri[["dimnames"]][["Terms"]])
-grep("case of ", tdm_news_tri[["dimnames"]][["Terms"]], value=T)
-df_freq <- get_freq_df(tdm_news_tri)
-head(df_freq[grep("^case of ", df_freq$ngram),])
-
-
-tdm_news_slim_tri <- tm::TermDocumentMatrix(corpus_news_slim, 
-    control = list(tokenize = trigram_tokenizer))
-tdm_news_slim_tri[["dimnames"]][["Terms"]]
-grep("case of", tdm_news_slim_tri[["dimnames"]][["Terms"]], value=T)
-
-df_freq <- get_freq_df(tdm_all)
+{
+    c <- c("I am Sam", "Sam I am", "I do not like green eggs and ham")
+    corp <- tm::VCorpus(tm::VectorSource(c))
+    tdm_bigram <- tm::TermDocumentMatrix(corp, control = list(tokenize = bigram_tokenizer))
+    df_bigram <- get_freq_df(tdm_bigram)
+    str(df_bigram)
     
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    corp_twit <- tm::Corpus(tm::DirSource(sample_dir, encoding="UTF-8", pattern="news"))
+    
+    corpus_twit_slim <- tm::VCorpus(tm::VectorSource(corp_twit[[1]][["content"]][c(2)]))
+    lapply(corpus_twit_slim, as.character)
+    
+    corpus_twit_slim_clean <- clean_corpus(corpus_twit_slim, rm_stop_words=F, stem=F)
+    lapply(corpus_twit_slim_clean, as.character)
+    
+    tdm_bigram <- tm::TermDocumentMatrix(corpus_twit_slim_clean, control = list(tokenize = bigram_tokenizer))
+    
+    
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    length(tdm_all_tri[["dimnames"]][["Terms"]])
+    grep("case of ", tdm_all_tri[["dimnames"]][["Terms"]], value=T)
+    df_all_freq <- get_freq_df(tdm_all_tri)
+    head(df_all_freq[grep("^case of ", df_all_freq$ngram),])
+    
+    
+    corpus_news <- tm::Corpus(
+        tm::DirSource(sample_dir, encoding="UTF-8", pattern="news"), 
+        readerControl = list(language="en_US"))
+    
+    corpus_news_slim <- tm::VCorpus(tm::VectorSource(corpus_news_clean[[1]][["content"]][51002]))
+    
+    
+    corpus_news_clean <- clean_corpus(corpus_news)
+    corpus_news_slim <- clean_corpus(corpus_news_slim, rm_stop_words = FALSE)
+    
+    # - define n-gram tokenizers
+    bigram_tokenizer <- function(x) unlist(
+        lapply(NLP::ngrams(NLP::words(x), 2), paste, collapse = " "), use.names = FALSE)
+    trigram_tokenizer <- function(x) unlist(
+        lapply(NLP::ngrams(NLP::words(x), 3), paste, collapse = " "), use.names = FALSE)
+    fourgram_tokenizer <- function(x) unlist(
+        lapply(NLP::ngrams(NLP::words(x), 4), paste, collapse = " "), use.names = FALSE)
+    
+    tdm_news_tri <- tm::TermDocumentMatrix(corpus_news_clean, 
+        control = list(tokenize = trigram_tokenizer))
+    length(tdm_news_tri[["dimnames"]][["Terms"]])
+    grep("case of ", tdm_news_tri[["dimnames"]][["Terms"]], value=T)
+    df_freq <- get_freq_df(tdm_news_tri)
+    head(df_freq[grep("^case of ", df_freq$ngram),])
+    
+    
+    tdm_news_slim_tri <- tm::TermDocumentMatrix(corpus_news_slim, 
+        control = list(tokenize = trigram_tokenizer))
+    tdm_news_slim_tri[["dimnames"]][["Terms"]]
+    grep("case of", tdm_news_slim_tri[["dimnames"]][["Terms"]], value=T)
+    
+    df_freq <- get_freq_df(tdm_all)
+}    
 
 
 
