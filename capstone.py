@@ -23,8 +23,8 @@ def main():
     """
     # - define input file paths
     dir_root = "/Users/Gus/Google Drive/dev/coursera/data_sciences/10_capstone"
-    dir_in = os.path.join(dir_root, "sample_data/en_US")
-    #dir_in = os.path.join(dir_root, "final/en_US/")
+    #dir_in = os.path.join(dir_root, "sample_data/en_US")
+    dir_in = os.path.join(dir_root, "final/en_US/")
     file_size = ''  # files of size 10 and 40 saved in sample data
     fp_profanity = os.path.join(dir_root, "profanity_list_en.txt")
     fp_twitter = os.path.join(dir_in, "en_US.twitter"+file_size+".txt")
@@ -32,18 +32,26 @@ def main():
     fp_blogs = os.path.join(dir_in, "en_US.blogs"+file_size+".txt")
 
     # - define output file paths
-    #dir_out = os.path.join(dir_root, "data_cache/en_US")
-    dir_out = os.path.join(dir_root, "data_cache/en_US/test")
+    dir_out = os.path.join(dir_root, "data_cache/en_US")
+    #dir_out = os.path.join(dir_root, "data_cache/en_US/test")
     fp_out_twitter = os.path.join(dir_out, "twitter_sent_tokenize.csv")
     fp_out_news = os.path.join(dir_out, "news_sent_tokenize.csv")
     fp_out_blogs = os.path.join(dir_out, "blogs_sent_tokenize.csv")
-    fp_out_1gram = os.path.join(dir_out, "1grams.csv")
-    fp_out_2gram = os.path.join(dir_out, "2grams.csv")
-    fp_out_3gram = os.path.join(dir_out, "3grams.csv")
-    fp_out_4gram = os.path.join(dir_out, "4grams.csv")
-    fp_out_5gram = os.path.join(dir_out, "5grams.csv")
+    file_append = ''
+    fp_out_1gram = os.path.join(dir_out, "1grams"+file_append+".csv")
+    fp_out_2gram = os.path.join(dir_out, "2grams"+file_append+".csv")
+    fp_out_3gram = os.path.join(dir_out, "3grams"+file_append+".csv")
+    fp_out_4gram = os.path.join(dir_out, "4grams"+file_append+".csv")
+    fp_out_5gram = os.path.join(dir_out, "5grams"+file_append+".csv")
+    # - limited files
+    min_freq = 2
+    fp_out_rm_1gram = os.path.join(dir_out, "1grams_gte"+str(min_freq)+"freq.csv")
+    fp_out_rm_2gram = os.path.join(dir_out, "2grams_gte"+str(min_freq)+"freq.csv")
+    fp_out_rm_3gram = os.path.join(dir_out, "3grams_gte"+str(min_freq)+"freq.csv")
+    fp_out_rm_4gram = os.path.join(dir_out, "4grams_gte"+str(min_freq)+"freq.csv")
+    fp_out_rm_5gram = os.path.join(dir_out, "5grams_gte"+str(min_freq)+"freq.csv")
 
-    # - define args
+    # - run ngrams args
     run_args = [
         {"n":1, "fp_out": fp_out_1gram},
         {"n":2, "fp_out": fp_out_2gram},
@@ -51,20 +59,60 @@ def main():
         {"n":4, "fp_out": fp_out_4gram},
         {"n":5, "fp_out": fp_out_5gram},
     ]
+    #gen_files(run_args, fp_profanity)
+    
+    # - remove records
+    rm_rows_args = [
+        {"fp_in": fp_out_1gram, "fp_out": fp_out_rm_1gram},
+        {"fp_in": fp_out_2gram, "fp_out": fp_out_rm_2gram},
+        {"fp_in": fp_out_3gram, "fp_out": fp_out_rm_3gram},
+        {"fp_in": fp_out_4gram, "fp_out": fp_out_rm_4gram},
+        {"fp_in": fp_out_5gram, "fp_out": fp_out_rm_5gram},
+    ]
+    rm_rows(rm_rows_args, min_freq)
+
+
+def rm_rows(args, min_freq=2):
+    """
+    """
+    ttl_start_time = time.time()
+    for run_cv in args:
+        print("rm rows: " + run_cv["fp_in"])
+        start_time = time.time()
+        with open(run_cv["fp_in"], mode='r') as f_in, open(run_cv["fp_out"], mode='w') as f_out:
+            # - skip header line
+            next(f_in)
+            # - loop over lines and write those with frequencey greater than threshold
+            for line_cv in f_in:
+                if int(line_cv.strip().split(",")[1]) >= min_freq:
+                    f_out.write(line_cv)
+        end_time = time.time()
+        run_time = end_time - start_time
+        print("file written: " + run_cv["fp_out"])
+        print("run time: " + str(round(run_time/60,2)) + " min")
+        print("~"*50)
+    ttl_end_time = time.time()
+    ttl_run_time = ttl_end_time - ttl_start_time
+    print("total run time: " + str(round(ttl_run_time/60,2)) + " min")
+    print("~"*50)
+
+
+def gen_files(run_args, fp_profanity):
+    """
+    """
     # - read in profanity set
     dat_profanity = set(line.strip() for line in open(fp_profanity))
-    
-    # - return data
-    ngram_freq = {}
-    
-    # - process all
+
+    # - process all ngrams
     ttl_start_time = time.time()
     for run_cv in run_args:
+        # - return data (inside loop other wise you mix ngrams! duh!)
+        ngram_freq = {}
         print("running ngram: " + str(run_cv["n"]))
         start_time = time.time()
-        process_file(ngram_freq, fp_twitter, dat_profanity, n=run_cv["n"], log=True)
-        process_file(ngram_freq, fp_news, dat_profanity, n=run_cv["n"], log=True)
-        process_file(ngram_freq, fp_blogs, dat_profanity, n=run_cv["n"], log=True)
+        process_file(ngram_freq, fp_twitter, dat_profanity, n=run_cv["n"], log=True, tag='twitter')
+        process_file(ngram_freq, fp_news, dat_profanity, n=run_cv["n"], log=True, tag='news')
+        process_file(ngram_freq, fp_blogs, dat_profanity, n=run_cv["n"], log=True, tag='blogs')
         write_dict_freq(run_cv["fp_out"], ngram_freq, log=True, min_freq=1)
         end_time = time.time()
         run_time = end_time - start_time
@@ -75,18 +123,8 @@ def main():
     print("total run time: " + str(round(ttl_run_time/60,2)) + " min")
     print("~"*50)
 
-    # - process files
-    # start_time = time.time()
-    # process_file(ngram_freq, fp_twitter, dat_profanity, n=2, log=True)
-    # process_file(ngram_freq, fp_news, dat_profanity, n=2, log=True)
-    # process_file(ngram_freq, fp_blogs, dat_profanity, n=2, log=True)
-    # write_dict_freq(fp_out_2gram, ngram_freq, log=True)
-    # end_time = time.time()
-    # run_time = end_time - start_time
-    # print("total run time: " + str(round(run_time/60,2)) + " min")
 
-
-def process_file(ngram_freq, file_in, profanity, n, log=False):
+def process_file(ngram_freq, file_in, profanity, n, log=False, tag=None, log_line=250000):
     """
     """
     # - log: file
@@ -106,7 +144,7 @@ def process_file(ngram_freq, file_in, profanity, n, log=False):
         line_count = 1
         for line_cv in f_in:
             # - log: rows processed
-            if log and line_count % 250000 == 0: print("  > processed: " + "{:,}".format(line_count) + " lines")
+            if log and line_count % log_line == 0: print("  > processed: " + "{:,}".format(line_count) + " lines")
             # - stip the newline character and sentence tokenize
             line_sentences = sent_tokenize(line_cv.strip(), language='english')
             # - write to output file
@@ -125,6 +163,7 @@ def process_file(ngram_freq, file_in, profanity, n, log=False):
                 for ng in ngrams(sent_tkns,n):
                     ng_str = ' '.join(ng)
                     ngram_freq[ng_str] = ngram_freq.get(ng_str,0)+1
+                    #ngram_freq[ng] = ngram_freq.get(ng,0)+1        # tuple key for debugging
                 # - debug
                 # print(str(line_count) + ": " + sent_cv + "\n  => " + sent_clean)
                 # print("  => " + str(list(ngrams(sent_tkns,n))))
